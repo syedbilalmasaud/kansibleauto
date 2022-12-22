@@ -3,8 +3,8 @@
 #
 #
 #
-- hosts: openshift
-  tasks:
+#- hosts: openshift
+#  tasks:
   - name: Update all installed packages using YUM module
     yum:
       name: '*'
@@ -64,8 +64,10 @@
   - name: adding docker registry 
     ansible.builtin.shell: mkdir /etc/docker /etc/containers
   - name: copy template
-    ansible.builtin.shell: cp ../templates/registries.conf /etc/containers
-  
+    ansible.builtin.copy:
+      src: "{{ role_path }}/templates/registries.conf"
+        #      cp ../templates/registries.conf /etc/containers
+      dest: /etc/containers
   - name: Restart service docker and daemon reload
     ansible.builtin.systemd:
       state: restarted
@@ -100,9 +102,9 @@
       - 8053/udp  
 
   - name: getting docker network 
-    ansible.builtin.shell: DOCKER_BRIDGE=`docker network inspect -f "{{range .IPAM.Config }}{{ .Subnet }}{{end}}" bridge`
-    register: DOCKER_BRIDGE
-    debug: DOCKER_BRIDGE  
+    ansible.builtin.shell: DOCKER_BRIDGE='docker network inspect -f "{{range .IPAM.Config }}{{ .Subnet }}{{end}}" bridge'
+    register: brdige
+      #    debug: bridge
 
   - name: allow Docker Bridge
     ansible.posix.firewalld:

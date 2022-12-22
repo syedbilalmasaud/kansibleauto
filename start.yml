@@ -1,0 +1,4 @@
+---
+- hosts: openshift
+  roles:
+    - openshiftaio
