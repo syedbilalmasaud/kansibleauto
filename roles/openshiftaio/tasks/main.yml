@@ -1,2 +1,129 @@
 ---
 # tasks file for openshiftaio
+#
+#
+#
+- hosts: openshift
+  tasks:
+  - name: Update all installed packages using YUM module
+    yum:
+      name: '*'
+      state: latest
+      update_cache: yes
+      update_only: yes
+    register: yum_update_status
+
+  - name: Disable SeLinux
+    ansible.posix.selinux:
+      state: disabled
+
+  - name: Installing Docker Pre-req - yum-utils
+    yum:
+      name: 'yum-utils'
+      state: latest
+
+  - name: Installing Docker Pre-req - device-mapper-persistent-data
+    yum:
+      name: 'device-mapper-persistent-data'
+      state: latest
+
+  - name: Installing Docker Pre-req - lvm2
+    yum:
+      name: 'lvm2'
+      state: latest
+
+
+  - name: Add Repo 
+    ansible.builtin.shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+
+  - name: install docker and other required packages
+    dnf: 
+      name: '{{ item }}'
+      state: present
+      update_cache: true
+    with_items:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - wget # to download OC packages
+      - tcpdump # for packet trace and troubleshooting 
+      - vim  # Default Centos is coming with vi but I love VIM, you may ignore it if you dont like
+  
+  - name: create docker user
+    ansible.builtin.user:
+      name: docker
+      comment: docker user
+      group: root
+
+  - name: create docker group
+    ansible.builtin.group:
+      name: docker
+      state: present
+
+  - name: adding docker registry 
+    ansible.builtin.shell: mkdir /etc/docker /etc/containers
+    ansible.builtin.shell: cp ../templates/registries.conf /etc/containers
+  
+  - name: Restart service docker and daemon reload
+    ansible.builtin.systemd:
+      state: restarted
+      daemon_reload: yes
+      name: docker 
+      
+  - name: Enable Docker service on startup
+    ansible.builtin.systemd:
+      state: started
+      enabled: yes
+      name: docker 
+
+  - name: Enable SysCtl Services required for OpenShift
+    ansible.posix.sysctl:
+      name: net.ipv4.ip_forward
+      value: '1'
+      sysctl_set: yes
+      state: present
+      reload: yes
+
+  - name: allow openshift ports on firewalld
+    ansible.posix.firewalld:
+      port: '{{ item }}'
+      permanent: yes
+      state: enabled
+      zone: public
+    with_items:
+      - 80/tcp
+      - 443/tcp
+      - 8443/tcp
+      - 53/udp
+      - 8053/udp  
+
+  - name: getting docker network 
+    ansible.builtin.shell: DOCKER_BRIDGE=`docker network inspect -f "{{range .IPAM.Config }}{{ .Subnet }}{{end}}" bridge`
+    register: DOCKER_BRIDGE
+    debug: DOCKER_BRIDGE  
+
+  - name: allow Docker Bridge
+    ansible.posix.firewalld:
+      source: '{{ DOCKER_BRIDGE }}'
+      state: enabled
+      zone: internal
+
+  - name: Downloading Openshift Origin
+    ansible.builtin.get_url:
+      url: https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz
+      dest: /opt/
+      mode: '0644'
+
+  - name: untar openshift 
+    ansible.builtin.unarchive:
+      src: /opt/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz
+      dest: /tmp/
+
+  - name: move files to bin directory
+    ansible.builtin.shell: cd /tmp/openshift-origin-client*/ && mv  oc kubectl  /usr/local/bin/
+  
+  - name: bringing up oc cluster
+    ansible.builtin.shell: oc cluster up 
+
+
