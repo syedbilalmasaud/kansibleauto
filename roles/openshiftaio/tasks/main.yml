@@ -88,43 +88,57 @@
       state: present
       reload: yes
 
+  - name: create firewalld zone
+    shell: firewall-cmd --permanent --new-zone=dockerc
+
   - name: allow openshift ports on firewalld
     ansible.posix.firewalld:
       port: '{{ item }}'
       permanent: yes
       state: enabled
-      zone: public
+      zone: dockerc
     with_items:
       - 80/tcp
       - 443/tcp
       - 8443/tcp
       - 53/udp
       - 8053/udp  
+  - name: copy script
+    copy:
+      src: "{{ role_path }}/files/docker_network.sh"
+      dest: /tmp/
+      mode: "0777"
 
   - name: getting docker network 
-    ansible.builtin.shell: DOCKER_BRIDGE='docker network inspect -f "{{range .IPAM.Config }}{{ .Subnet }}{{end}}" bridge'
-    register: brdige
+    ansible.builtin.shell: /tmp/docker_network.sh
+    register: subnet
       #    debug: bridge
+
+  - name: Generate the docker network
+    debug:
+      msg: '{{ subnet.stdout }}'
 
   - name: allow Docker Bridge
     ansible.posix.firewalld:
-      source: '{{ DOCKER_BRIDGE }}'
+      source: '{{ subnet.stdout }}'
       state: enabled
-      zone: internal
+      permanent: yes
+      zone: dockerc
 
   - name: Downloading Openshift Origin
-    ansible.builtin.get_url:
-      url: https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz
-      dest: /opt/
-      mode: '0644'
-
-  - name: untar openshift 
     ansible.builtin.unarchive:
-      src: /opt/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz
-      dest: /tmp/
+      src: "https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz"
+      dest: "/tmp/"
+      mode: '0777'
+      remote_src: yes
+
+        #  - name: untar openshift 
+        #    ansible.builtin.unarchive:
+        #      src: /opt/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz
+        #      dest: /tmp/
 
   - name: move files to bin directory
     ansible.builtin.shell: cd /tmp/openshift-origin-client*/ && mv  oc kubectl  /usr/local/bin/
   
   - name: bringing up oc cluster
-    ansible.builtin.shell: oc cluster up 
+    ansible.builtin.shell: oc cluster up --skip-registry-check=true
