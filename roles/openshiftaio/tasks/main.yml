@@ -63,6 +63,7 @@
 
   - name: adding docker registry 
     ansible.builtin.shell: mkdir /etc/docker /etc/containers
+  - name: copy template
     ansible.builtin.shell: cp ../templates/registries.conf /etc/containers
   
   - name: Restart service docker and daemon reload
@@ -125,5 +126,3 @@
   
   - name: bringing up oc cluster
     ansible.builtin.shell: oc cluster up 
-
-
